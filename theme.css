@@ -1,0 +1,41 @@
+/* Shared dark theme + theme toggle (used by every page) */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1A1A2E;
+  --surface: #2D2D44;
+  --text: #E5E5E5;
+  --muted: #A1A1B5;
+  --border: #3F3F5A;
+  --border-strong: #55557A;
+  --grey-btn: #3F3F5A;
+  --track: #3F3F5A;
+  --accent-text: #2DD4BF;
+  --error-bg: #3B1D2A;
+  --error-text: #FCA5A5;
+  --error-border: #7F1D1D;
+}
+
+.theme-toggle {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.1s;
+}
+
+.theme-toggle:hover { border-color: var(--teal); }
+.theme-toggle:active { transform: scale(0.92); }
+.theme-toggle:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
+.theme-toggle svg { width: 18px; height: 18px; }
+
+/* Show the moon in light mode (switch to dark) and the sun in dark mode */
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }

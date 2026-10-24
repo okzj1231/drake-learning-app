@@ -1,0 +1,11 @@
+{
+  "name": "sensei-english",
+  "private": true,
+  "description": "English learning app with flashcards and an AI tutor",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0"
+  }
+}

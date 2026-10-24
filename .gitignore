@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Vercel
+.vercel/
+
+# Secrets: never commit real keys (.env.example is fine)
+.env
+.env.local
+.env*.local
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
