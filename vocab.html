@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="auth-pending">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -371,6 +371,9 @@
     @media (prefers-reduced-motion: reduce) {
       .card-inner, .actions, .bar-fill { transition: none; }
     }
+
+    /* Hidden until the login check finishes, so logged-out visitors never see the page */
+    .auth-pending body { visibility: hidden; }
   </style>
 </head>
 <body>
@@ -421,6 +424,8 @@
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+  <script src="auth.js"></script>
   <script src="vocab-data.js"></script>
   <script src="activity.js"></script>
   <script>
@@ -662,6 +667,10 @@
     });
 
     render();
+
+    // Only logged-in students may see this page. Offline, a device that has logged in
+    // before can keep studying (the session can't be checked without a connection).
+    requireAuth({ allowOffline: true }).then(() => document.documentElement.classList.remove("auth-pending"));
   </script>
 </body>
 </html>

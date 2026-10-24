@@ -1,9 +1,14 @@
 // Vercel serverless function: POST /api/chat
 // Keeps the Anthropic API key and the system prompt on the server.
-// Request body:  { message: string, history: [{ role: "user" | "assistant", content: string }] }
-// Response body: { reply: string }  or  { error: string }
+// Only logged-in users with a verified email can call it, each up to DAILY_MESSAGE_LIMIT
+// messages per day. Conversations are saved in Supabase and the history sent to the model
+// is read from there, not from the browser.
+// Request headers: Authorization: Bearer <Supabase access token>
+// Request body:    { message: string, conversationId?: string }
+// Response body:   { reply: string, conversationId: string }  or  { error: string, code?: string }
 
 const Anthropic = require("@anthropic-ai/sdk").default;
+const { createClient } = require("@supabase/supabase-js");
 const VOCAB = require("../vocab-data.js");
 
 const MODEL = "claude-sonnet-5-5";
@@ -12,6 +17,9 @@ const MAX_TOKENS = 200;
 // Limits so the endpoint can't be used for long, expensive requests
 const MAX_MESSAGE_CHARS = 1000;
 const MAX_HISTORY_MESSAGES = 20;
+const DAILY_MESSAGE_LIMIT = Number(process.env.DAILY_MESSAGE_LIMIT) || 50;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The flashcard words, so Teacher can praise students for using them
 const VOCAB_WORDS = Object.values(VOCAB)
@@ -23,29 +31,108 @@ const SYSTEM_PROMPT = `Ti chiami Teacher. Sei un tutor di inglese paziente, cord
 // Reads ANTHROPIC_API_KEY from the environment
 const client = new Anthropic();
 
-function isValidTurn(turn) {
-  return turn
-    && (turn.role === "user" || turn.role === "assistant")
-    && typeof turn.content === "string"
-    && turn.content.length <= MAX_MESSAGE_CHARS * 2;
+// Server-only Supabase client: the secret key bypasses row-level security, so it
+// must never reach the browser. Used to check tokens, count usage and save chats.
+const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false }
+});
+
+// The logged-in user behind the request's access token, or null
+async function getUser(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (!token) return null;
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data?.user?.email_confirmed_at) return null;
+  return data.user;
 }
 
-// Validate the front-end input and build the messages array for the API
-function buildMessages(body) {
-  const message = typeof body?.message === "string" ? body.message.trim() : "";
-  if (!message) return { error: "Message is required." };
-  if (message.length > MAX_MESSAGE_CHARS) {
-    return { error: `Message is too long (max ${MAX_MESSAGE_CHARS} characters).` };
+// Recent turns of one of the user's conversations, oldest first.
+// Returns null when the conversation doesn't exist or belongs to someone else.
+async function loadHistory(userId, conversationId) {
+  const { data: conversation, error } = await supabaseAdmin
+    .from("conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!conversation) return null;
+
+  const { data: rows, error: messagesError } = await supabaseAdmin
+    .from("messages")
+    .select("role, content")
+    .eq("conversation_id", conversationId)
+    .order("id", { ascending: false })
+    .limit(MAX_HISTORY_MESSAGES);
+  if (messagesError) throw messagesError;
+
+  const history = rows.reverse();
+  // The conversation sent to the model must start with the student
+  while (history.length && history[0].role !== "user") history.shift();
+  return history;
+}
+
+// Counts one message against today's limit; false when the limit is reached
+async function consumeQuota(userId) {
+  const { data, error } = await supabaseAdmin.rpc("consume_message_quota", {
+    p_user_id: userId,
+    p_limit: DAILY_MESSAGE_LIMIT
+  });
+  if (error) throw error;
+  return data === true;
+}
+
+// Saves the exchange, creating the conversation on its first message.
+// Returns the conversation id.
+async function saveExchange(userId, conversationId, message, reply) {
+  if (!conversationId) {
+    const { data, error } = await supabaseAdmin
+      .from("conversations")
+      .insert({ user_id: userId, title: message.slice(0, 80) })
+      .select("id")
+      .single();
+    if (error) throw error;
+    conversationId = data.id;
+  } else {
+    const { error } = await supabaseAdmin
+      .from("conversations")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("id", conversationId);
+    if (error) throw error;
   }
 
-  const history = Array.isArray(body.history) ? body.history : [];
-  if (!history.every(isValidTurn)) return { error: "Invalid conversation history." };
+  const { error } = await supabaseAdmin.from("messages").insert([
+    { conversation_id: conversationId, user_id: userId, role: "user", content: message },
+    { conversation_id: conversationId, user_id: userId, role: "assistant", content: reply }
+  ]);
+  if (error) throw error;
+  return conversationId;
+}
 
-  // Keep only the recent turns, and make sure the conversation starts with the student
-  const recent = history.slice(-MAX_HISTORY_MESSAGES).map(({ role, content }) => ({ role, content }));
-  while (recent.length && recent[0].role !== "user") recent.shift();
+async function askTeacher(messages) {
+  const response = await client.beta.messages.create({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    // Thinking is on by default for this model and its tokens count toward
+    // max_tokens, which truncated (or emptied) the short tutor replies
+    thinking: { type: "between_tools" },
+    // If a safety classifier declines, retry on a fallback model in the same call
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    system: SYSTEM_PROMPT,
+    messages
+  });
 
-  return { messages: [...recent, { role: "user", content: message }] };
+  if (response.stop_reason === "refusal") {
+    return "Sorry, I can't help with that. Let's practice something else! 😊";
+  }
+
+  return response.content
+    .filter(block => block.type === "text")
+    .map(block => block.text)
+    .join("")
+    .trim();
 }
 
 module.exports = async function handler(req, res) {
@@ -54,37 +141,44 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   }
 
-  const { messages, error } = buildMessages(req.body);
-  if (error) return res.status(400).json({ error });
+  const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  if (!message) return res.status(400).json({ error: "Message is required." });
+  if (message.length > MAX_MESSAGE_CHARS) {
+    return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE_CHARS} characters).` });
+  }
 
+  const conversationId = req.body.conversationId || null;
+  if (conversationId !== null && !(typeof conversationId === "string" && UUID_RE.test(conversationId))) {
+    return res.status(400).json({ error: "Invalid conversation." });
+  }
+
+  let user;
+  let history = [];
   try {
-    const response = await client.beta.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      // Thinking is on by default for this model and its tokens count toward
-      // max_tokens, which truncated (or emptied) the short tutor replies
-      thinking: { type: "between_tools" },
-      // If a safety classifier declines, retry on a fallback model in the same call
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: SYSTEM_PROMPT,
-      messages
-    });
-
-    if (response.stop_reason === "refusal") {
-      return res.status(200).json({
-        reply: "Sorry, I can't help with that. Let's practice something else! 😊"
-      });
+    user = await getUser(req);
+    if (!user) {
+      return res.status(401).json({ error: "Please log in to chat with Teacher.", code: "unauthenticated" });
     }
 
-    const reply = response.content
-      .filter(block => block.type === "text")
-      .map(block => block.text)
-      .join("")
-      .trim();
+    if (conversationId) {
+      history = await loadHistory(user.id, conversationId);
+      if (!history) return res.status(404).json({ error: "Conversation not found.", code: "conversation_not_found" });
+    }
 
-    if (!reply) return res.status(502).json({ error: "Teacher didn't reply. Please try again." });
-    return res.status(200).json({ reply });
+    if (!(await consumeQuota(user.id))) {
+      return res.status(429).json({
+        error: `You've reached today's limit of ${DAILY_MESSAGE_LIMIT} messages. See you tomorrow! 👋`,
+        code: "daily_limit"
+      });
+    }
+  } catch (err) {
+    console.error("Supabase error:", err);
+    return res.status(500).json({ error: "Teacher couldn't answer right now. Please try again." });
+  }
+
+  let reply;
+  try {
+    reply = await askTeacher([...history, { role: "user", content: message }]);
   } catch (err) {
     // Log details on the server; never send API error internals to the browser
     console.error("Anthropic API error:", err);
@@ -96,4 +190,16 @@ module.exports = async function handler(req, res) {
     }
     return res.status(502).json({ error: "Teacher couldn't answer right now. Please try again." });
   }
+
+  if (!reply) return res.status(502).json({ error: "Teacher didn't reply. Please try again." });
+
+  // A failed save shouldn't cost the student the reply they already got
+  let savedId = conversationId;
+  try {
+    savedId = await saveExchange(user.id, conversationId, message, reply);
+  } catch (err) {
+    console.error("Could not save conversation:", err);
+  }
+
+  return res.status(200).json({ reply, conversationId: savedId });
 };

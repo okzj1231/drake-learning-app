@@ -1,14 +1,22 @@
 // Service worker: keeps the app's files cached so the flashcards work offline.
 // Bump CACHE_VERSION when the list of files changes.
-const CACHE_VERSION = "sensei-v1";
+const CACHE_VERSION = "sensei-v3";
+
+// The login library, cached so pages can still start (and check for a saved login) offline
+const SUPABASE_JS = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js";
 
 const PRECACHE = [
+  SUPABASE_JS,
   "./vocab.html",
   "./vocab-data.js",
   "./activity.js",
   "./theme.css",
   "./theme.js",
   "./pwa.js",
+  "./auth.js",
+  "./auth.css",
+  "./login.html",
+  "./profile.html",
   "./dashboard.html",
   "./index.html",
   "./manifest.json",
@@ -38,8 +46,9 @@ self.addEventListener("activate", event => {
 // fall back to the cache when offline.
 self.addEventListener("fetch", event => {
   const { request } = event;
-  // Only handle our own files (never the Anthropic API calls)
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  // Only handle our own files and the login library (never API calls to Supabase or Anthropic)
+  const isOwnFile = new URL(request.url).origin === self.location.origin;
+  if (request.method !== "GET" || !(isOwnFile || request.url === SUPABASE_JS)) return;
 
   event.respondWith(
     fetch(request)

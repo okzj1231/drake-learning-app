@@ -35,6 +35,23 @@
 .theme-toggle:focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; }
 .theme-toggle svg { width: 18px; height: 18px; }
 
+/* Round link to the profile page, next to the theme toggle */
+.profile-btn {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+
+.profile-btn:hover { border-color: var(--teal); }
+.profile-btn svg { width: 18px; height: 18px; }
+
 /* Show the moon in light mode (switch to dark) and the sun in dark mode */
 .theme-toggle .icon-sun { display: none; }
 :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
