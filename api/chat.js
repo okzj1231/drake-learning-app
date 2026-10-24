@@ -33,7 +33,16 @@ const client = new Anthropic();
 
 // Server-only Supabase client: the secret key bypasses row-level security, so it
 // must never reach the browser. Used to check tokens, count usage and save chats.
-const supabaseAdmin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, {
+// Only the origin (https://<project>.supabase.co): a pasted ".../rest/v1/" breaks every call
+function supabaseOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url;
+  }
+}
+
+const supabaseAdmin = createClient(supabaseOrigin(process.env.SUPABASE_URL), process.env.SUPABASE_SECRET_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
 });
 
