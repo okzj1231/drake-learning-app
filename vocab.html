@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Sensei – Vocabulary</title>
+  <title>Teacher – Vocabulary</title>
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#14B8A6" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <meta name="apple-mobile-web-app-title" content="Sensei" />
+  <meta name="apple-mobile-web-app-title" content="Teacher" />
   <link rel="stylesheet" href="theme.css" />
   <script src="theme.js"></script>
   <script src="pwa.js" defer></script>
@@ -653,6 +653,11 @@
     resetBtn.addEventListener("click", () => {
       for (const word of VOCAB[activeTopic].words) delete progress[wordKey(activeTopic, word)];
       saveProgress();
+      // Also forget this topic as "recently studied", or the chat keeps suggesting it
+      try {
+        const last = JSON.parse(localStorage.getItem(LAST_STUDIED_KEY));
+        if (last?.topic === activeTopic) localStorage.removeItem(LAST_STUDIED_KEY);
+      } catch {}
       render();
     });
 

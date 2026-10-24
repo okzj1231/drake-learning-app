@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Sensei – English Tutor</title>
+  <title>Teacher – English Tutor</title>
   <link rel="icon" href="icons/icon-192.png" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#14B8A6" />
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
-  <meta name="apple-mobile-web-app-title" content="Sensei" />
+  <meta name="apple-mobile-web-app-title" content="Teacher" />
   <link rel="stylesheet" href="theme.css" />
   <script src="theme.js"></script>
   <script src="pwa.js" defer></script>
@@ -379,9 +379,9 @@
     </nav>
 
     <header>
-      <div class="avatar" aria-hidden="true">S</div>
+      <div class="avatar" aria-hidden="true">T</div>
       <div class="tutor-info">
-        <div class="tutor-name">Sensei</div>
+        <div class="tutor-name">Teacher</div>
         <div class="status"><span class="status-dot"></span>Online</div>
       </div>
       <button class="new-chat-btn" id="newChatBtn" type="button">+ New chat</button>
@@ -506,7 +506,7 @@
     function showTyping() {
       const el = document.createElement("div");
       el.className = "typing";
-      el.innerHTML = '<div class="dots"><span></span><span></span><span></span></div><span class="typing-text">Sensei is typing...</span>';
+      el.innerHTML = '<div class="dots"><span></span><span></span><span></span></div><span class="typing-text">Teacher is typing...</span>';
       messagesEl.appendChild(el);
       scrollToBottom();
       return el;
@@ -534,7 +534,7 @@
       if (!res.ok) {
         throw new Error(data?.error || `Request failed (${res.status})`);
       }
-      if (!data?.reply) throw new Error("Sensei didn't reply. Please try again.");
+      if (!data?.reply) throw new Error("Teacher didn't reply. Please try again.");
       return data.reply;
     }
 
@@ -567,7 +567,7 @@
       activeRequest = controller;
 
       const slowTimer = setTimeout(() => {
-        typingEl.querySelector(".typing-text").textContent = "Sensei is thinking hard! Please wait...";
+        typingEl.querySelector(".typing-text").textContent = "Teacher is thinking hard! Please wait...";
         scrollToBottom();
       }, SLOW_MS);
       const timeoutTimer = setTimeout(() => controller.abort(), TIMEOUT_MS);

@@ -1,6 +1,6 @@
 {
-  "name": "Sensei English",
-  "short_name": "Sensei",
+  "name": "Teacher English",
+  "short_name": "Teacher",
   "description": "Practice English with flashcards and an AI tutor.",
   "start_url": "./dashboard.html",
   "scope": "./",
